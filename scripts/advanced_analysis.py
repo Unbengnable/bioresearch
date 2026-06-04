@@ -157,7 +157,7 @@ ax = axes[0]
 colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00']
 loc_list = sorted(set(l[1] for l in SAMPLES))
 loc_colors = {l: colors[i % len(colors)] for i, l in enumerate(loc_list)}
-markers = {'2025-5.16': 'o', '2025-5.23': 's', '2025-5.31': '^'}
+markers = {'2026-5.16': 'o', '2026-5.23': 's', '2026-5.31': '^'}
 
 for i, (date, loc) in enumerate(SAMPLES):
     ax.scatter(pc_scores[i, 0], pc_scores[i, 1],
@@ -563,7 +563,7 @@ for i, (date, loc) in enumerate(SAMPLES):
     cum_pct = np.cumsum(nz_sorted) / nz_sorted.sum() * 100
     rank_pct = np.arange(1, len(cum_pct)+1) / len(nz_sorted) * 100
     ax.plot(rank_pct, cum_pct, color=loc_colors[loc],
-            linestyle=['-', '--', '-.'][['2025-5.16', '2025-5.23', '2025-5.31'].index(date)],
+            linestyle=['-', '--', '-.'][['2026-5.16', '2026-5.23', '2026-5.31'].index(date)],
             alpha=0.7, label=f"{date[-4:]} {loc}")
 
 ax.set_xlabel('物种累积百分比 (%)', fontsize=11)

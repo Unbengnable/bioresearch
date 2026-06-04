@@ -150,8 +150,8 @@ time_dist = np.zeros((N, N))
 for i in range(N):
     for j in range(N):
         # 日期差（按批次）
-        di = ['2025-5.16', '2025-5.23', '2025-5.31'].index(SAMPLES[i][0])
-        dj = ['2025-5.16', '2025-5.23', '2025-5.31'].index(SAMPLES[j][0])
+        di = ['2026-5.16', '2026-5.23', '2026-5.31'].index(SAMPLES[i][0])
+        dj = ['2026-5.16', '2026-5.23', '2026-5.31'].index(SAMPLES[j][0])
         time_dist[i, j] = abs(di - dj)
 time_condensed = squareform(time_dist)
 
