@@ -22,9 +22,5 @@ env/
 .DS_Store
 Thumbs.db
 
-# Output (large binaries — regenerate with scripts)
-output/figures/*.png
-output/report/*.docx
-
 # Jupyter
 .ipynb_checkpoints/

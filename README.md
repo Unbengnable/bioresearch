@@ -91,6 +91,8 @@ python scripts/gen_report.py
 - `output/figures/*.png` — 7张分析图表
 - `output/report/浮游生物群落生态调查报告.docx` — 综合报告
 
+> 📌 **样例说明**：`output/figures/` 和 `output/report/` 中的文件是本项目自行提供的预生成样例，便于读者无需安装依赖即可查看分析结果。它们均可通过运行对应脚本重新生成。
+
 ## 主要发现
 
 ### 环境梯度
