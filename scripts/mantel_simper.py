@@ -18,7 +18,7 @@ import os
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_FILE = os.path.join(PROJECT_ROOT, "data", "data.txt")
 WATER_FILE = os.path.join(PROJECT_ROOT, "data", "water.txt")
-COUNT_MAP = {"若干": 3, "很多": 8, "大量": 15}
+COUNT_MAP = {"若干": 27, "很多": 8, "大量": 15}
 
 # --- 生物数据 ---
 bio_rows = []

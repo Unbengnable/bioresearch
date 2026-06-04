@@ -42,7 +42,7 @@ WATER_FILE = os.path.join(PROJECT_ROOT, "data", "water.txt")
 OUT_DIR = os.path.join(PROJECT_ROOT, "output", "figures")
 
 # 模糊计数映射
-COUNT_MAP = {"若干": 3, "很多": 8, "大量": 15}
+COUNT_MAP = {"若干": 27, "很多": 8, "大量": 15}
 
 # --- 读取生物数据 ---
 bio_rows = []

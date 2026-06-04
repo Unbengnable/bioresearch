@@ -26,7 +26,7 @@ for line in lines[1:]:
 # 2. 模糊计数 → 数值映射
 # ============================================================
 COUNT_MAP = {
-    "若干": 3,
+    "若干": 27,
     "很多": 8,
     "大量": 15,
 }
@@ -178,7 +178,7 @@ out_file = os.path.join(PROJECT_ROOT, "output", "results", "analysis_result.txt"
 with open(out_file, "w", encoding="utf-8") as f:
     f.write("=" * 90 + "\n")
     f.write("生物多样性分析结果\n")
-    f.write("注：模糊计数映射规则：若干→3, 很多→8, 大量→15\n")
+    f.write("注：模糊计数映射规则：若干→27, 很多→8, 大量→15\n")
     f.write("=" * 90 + "\n\n")
 
     # 逐样点表
