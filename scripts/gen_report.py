@@ -290,6 +290,62 @@ for (date, loc), entries in groups.items():
         loc_agg[loc]["species"].add(sp)
         loc_agg[loc]["total_n"] += n
 
+# ── 预计算供文本引用的统计量 ──────────────────────────
+# 采样点物种数排名
+loc_species_rank = sorted([(loc, len(agg["species"]), agg["total_n"])
+                           for loc, agg in loc_agg.items()], key=lambda x: -x[1])
+loc_max_sp = loc_species_rank[0]   # 物种数最多的样点
+loc_max_n = sorted(loc_species_rank, key=lambda x: -x[2])[0]  # 多度最高的样点
+
+# 按日期汇总物种数和多度
+date_sp_counts = {}
+date_n_counts = {}
+for d in DATES:
+    idx = [i for i, (dd, l) in enumerate(SAMPLES) if dd == d]
+    sp_set = set()
+    for i in idx:
+        for j, sp in enumerate(all_species):
+            if species_mat[i, j] > 0:
+                sp_set.add(sp)
+    date_sp_counts[d] = len(sp_set)
+    date_n_counts[d] = int(species_mat[idx].sum())
+
+# Pielou 与环境因子的相关性
+pielou_tds_r, pielou_tds_p = stats.pearsonr(div_indices[:, 4], env_mat[:, 0])
+pielou_sal_r, pielou_sal_p = stats.pearsonr(div_indices[:, 4], env_mat[:, 1])
+
+# 指示物种（每个样点的 Top 1）
+indicator_top = {}
+for loc in LOCATIONS:
+    li = [i for i, (d, l) in enumerate(SAMPLES) if l == loc]
+    oi = [i for i, (d, l) in enumerate(SAMPLES) if l != loc]
+    best = None
+    for sj, sp in enumerate(all_species):
+        in_loc = species_mat[li, sj].sum()
+        in_other = species_mat[oi, sj].sum()
+        total = in_loc + in_other
+        if total < 5: continue
+        A = in_loc / total
+        presence = sum(1 for i in li if species_mat[i, sj] > 0)
+        B = presence / len(li)
+        indval = A * B
+        if best is None or indval > best[1]:
+            best = (sp, indval, in_loc, presence)
+    if best and best[1] > 0.4:
+        indicator_top[loc] = best
+
+# PC1 得分极值采样点
+pc1_by_sample = [(pc_scores[i, 0], SAMPLES[i][0], SAMPLES[i][1]) for i in range(N)]
+pc1_neg_loc = sorted(set(loc for score, dt, loc in pc1_by_sample if score < 0))
+pc1_pos_loc = sorted(set(loc for score, dt, loc in pc1_by_sample if score > 0))
+
+# 各日期 PCA 得分范围（用于描述 PC2 分散程度）
+pc2_by_loc_date = defaultdict(list)
+for i, (date, loc) in enumerate(SAMPLES):
+    pc2_by_loc_date[loc].append(pc_scores[i, 1])
+pc2_spread = {loc: np.ptp(vals) for loc, vals in pc2_by_loc_date.items()}
+pc2_most_spread = sorted(pc2_spread.items(), key=lambda x: -x[1])
+
 # ════════════════════════════════════════════════════════
 # 1. 创建文档
 # ════════════════════════════════════════════════════════
@@ -438,17 +494,23 @@ tab_row(pt2, 5, ['解释率%', f'{var_exp[0]:.1f}', f'{var_exp[1]:.1f}', f'{var_
 
 doc.add_paragraph('')
 doc.add_paragraph(
-    'PC1解释61.6%的方差，TDS（-0.562）、盐度（-0.560）和电导率（-0.561）载荷最大且方向一致，'
-    '可解释为"离子浓度轴"。PC2解释22.2%的方差，pH（+0.724）和温度（+0.686）载荷最大，'
+    f'PC1解释{var_exp[0]:.1f}%的方差，TDS（{eigvecs[0,0]:+.3f}）、盐度（{eigvecs[1,0]:+.3f}）'
+    f'和电导率（{eigvecs[3,0]:+.3f}）载荷最大且方向一致，'
+    f'可解释为"离子浓度轴"。PC2解释{var_exp[1]:.1f}%的方差，pH（{eigvecs[2,1]:+.3f}）'
+    f'和温度（{eigvecs[4,1]:+.3f}）载荷最大，'
     f'可解释为"水化学-温度轴"。前两个主成分累计解释{var_exp[:2].sum():.1f}%的方差，能很好反映原始水质信息。'
 )
 
 add_fig(os.path.join(FIG_DIR, "pca_analysis.png"), Inches(6.0))
 doc.add_paragraph(
-    'PCA得分图（左）展示了15个样本在PC1-PC2空间中的分布，同一采样点的三次调查以不同形状标记。'
-    '箭头表示各环境变量的载荷方向和大小。后山水池样本在PC1上偏负，表明其离子浓度较高；'
-    '黎照湖和香雪海样本在PC2上分散较大，体现了pH和温度的波动。'
-    '右图展示了PC1与Shannon多样性指数的关系。'
+    f'PCA得分图（左）展示了15个样本在PC1-PC2空间中的分布，同一采样点的三次调查以不同形状标记。'
+    f'箭头表示各环境变量的载荷方向和大小。'
+    f'{"、".join(sorted(pc1_neg_loc)[:2])}样本在PC1上偏负，'
+    f'反映较高的离子浓度综合得分；'
+    f'{"、".join(sorted(pc1_pos_loc)[:2])}样本在PC1上偏正，离子浓度综合得分较低。'
+    f'在PC2轴上，{pc2_most_spread[0][0]}和{pc2_most_spread[1][0]}样本的分散程度最大，'
+    f'体现了pH和温度在时间维度上的波动。'
+    f'右图展示了PC1与Shannon多样性指数的关系。'
 )
 
 doc.add_page_break()
@@ -494,9 +556,11 @@ for r, loc in enumerate(LOCATIONS):
 
 doc.add_paragraph('')
 doc.add_paragraph(
-    '梦川累计物种数最高（39种），其次为菜根谭（37种），表明这两个样点的生境异质性较高，'
-    '能为更多浮游生物种类提供适宜栖境。后山水池累计总多度最高（283），但物种数仅有28种，'
-    '提示可能存在少数优势种主导群落结构的情况。'
+    f'{loc_max_sp[0]}累计物种数最高（{loc_max_sp[1]}种），'
+    f'其次为{loc_species_rank[1][0]}（{loc_species_rank[1][1]}种），表明这两个样点的生境异质性较高，'
+    f'能为更多浮游生物种类提供适宜栖境。{loc_max_n[0]}累计总多度最高（{loc_max_n[2]}），'
+    f'但物种数仅有{loc_max_n[1]}种，'
+    f'提示可能存在少数优势种主导群落结构的情况。'
 )
 
 h2('3.4 物种多度排名（Top 20）')
@@ -624,8 +688,9 @@ for di, dl in enumerate(div_labels):
 
 doc.add_paragraph('')
 doc.add_paragraph(
-    'Pielou均匀度与TDS（r=+0.56, p<0.05）和盐度（r=+0.60, p<0.05）呈显著正相关，'
-    '表明离子浓度较高的水域群落结构趋于均匀，优势种被稀释。'
+    f'Pielou均匀度与TDS（r={pielou_tds_r:+.2f}, p={pielou_tds_p:.3f}）'
+    f'和盐度（r={pielou_sal_r:+.2f}, p={pielou_sal_p:.3f}）的相关性不显著，'
+    f'表明在当前的样本量和水质梯度范围内，离子浓度对群落均匀度的直接影响有限。'
 )
 
 add_fig(os.path.join(FIG_DIR, "correlation_heatmap.png"), Inches(5.0))
@@ -645,7 +710,7 @@ for r, (key, (rv, pv)) in enumerate(mantel_results.items()):
 doc.add_paragraph('')
 doc.add_paragraph(
     'Mantel检验的核心发现：\n'
-    f'（1）时间距离与群落相异度呈极显著正相关（r={r_time:+.3f}, p<0.001），'
+    f'（1）时间距离与群落相异度呈极显著正相关（r={r_time:+.3f}, p={p_time:.4f}），'
     f'是群落差异的最强解释因素，表明即使在短短三周内，浮游生物群落也发生了显著的演替变化。\n'
     f'（2）TDS和电导率单独与群落差异呈显著相关（p<0.05），但效应量较小（|r|<0.2），'
     f'表明离子浓度对群落组成有一定影响但不是主导因素。\n'
@@ -767,11 +832,24 @@ for loc in LOCATIONS:
         row_idx += 1
 
 doc.add_paragraph('')
-doc.add_paragraph(
-    '轮虫是梦川的完美指示种（IndVal=1.000），在梦川的三次调查中均出现且全部个体仅分布于梦川，'
-    '表明轮虫对梦川的特定生境条件具有高度依赖性。角星鼓藻是菜根谭的重要指示种（IndVal=0.875），'
-    '反映出菜根谭可能具有适宜鼓藻类生长的微生境。'
-)
+# 构建指示物种讨论文字
+indicator_notes = []
+for loc in LOCATIONS:
+    if loc in indicator_top:
+        sp, iv, ab, pr = indicator_top[loc]
+        if iv >= 0.9:
+            indicator_notes.append(
+                f'{sp}是{loc}的完美指示种（IndVal={iv:.3f}），'
+                f'在{loc}的三次调查中均出现且全部个体仅分布于{loc}，'
+                f'表明{sp}对{loc}的特定生境条件具有高度依赖性')
+        elif iv >= 0.7:
+            indicator_notes.append(
+                f'{sp}是{loc}的重要指示种（IndVal={iv:.3f}），'
+                f'反映出{loc}可能具有适宜该类群生长的微生境')
+
+indicator_text = '。'.join(indicator_notes) + '。' if indicator_notes else \
+    '各采样点均有其特定的指示物种（详见上表），反映了不同生境对浮游生物群落的筛选作用。'
+doc.add_paragraph(indicator_text)
 
 doc.add_page_break()
 
@@ -784,10 +862,11 @@ h2('8.1 群落多样性的时空格局')
 doc.add_paragraph(
     '本研究在五个淡水采样点进行的三次重复调查表明，浮游生物群落多样性在空间上差异较小'
     '（各采样点Shannon H\'在1.5~2.5之间波动），但在时间上呈现明显的演替趋势。'
-    '物种数从第一次调查的27种快速增长至第二次的51种后趋于饱和，个体数量则持续增长'
-    f'（{int(species_mat[[i for i,(d,l) in enumerate(SAMPLES) if d==DATES[0]]].sum())}'
-    f'→{int(species_mat[[i for i,(d,l) in enumerate(SAMPLES) if d==DATES[1]]].sum())}'
-    f'→{int(species_mat[[i for i,(d,l) in enumerate(SAMPLES) if d==DATES[2]]].sum())}），'
+    f'物种数从第一次调查的{date_sp_counts[DATES[0]]}种快速增长至'
+    f'第二次的{date_sp_counts[DATES[1]]}种后趋于饱和，个体数量则持续增长'
+    f'（{date_n_counts[DATES[0]]}'
+    f'→{date_n_counts[DATES[1]]}'
+    f'→{date_n_counts[DATES[2]]}），'
     '推测若干类物种（实际25~30个体）在后续调查中集中出现，使多度大幅增长，'
     '群落正经历从物种拓殖向优势种扩张的演替阶段转换。'
 )
