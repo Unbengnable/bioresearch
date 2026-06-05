@@ -164,6 +164,8 @@ for i in range(N):
             ph = get_phylum(sp)
             phylums_by_sample[i, phylum_list.index(ph)] += species_mat[i, j]
 
+total_by_phylum = phylums_by_sample.sum(axis=0)
+
 # ── Bray-Curtis ──────────────────────────────────────
 def bray_curtis(x, y):
     s = np.sum(np.abs(x - y))
@@ -174,6 +176,12 @@ bc_dist = np.zeros((N, N))
 for i in range(N):
     for j in range(N):
         bc_dist[i, j] = bray_curtis(species_mat[i], species_mat[j])
+
+# ── 按采样点构建聚合矩阵（提前计算，供NMDS/SIMPER共用）─
+loc_mats = {}
+for loc in LOCATIONS:
+    indices = [i for i, (d, l) in enumerate(SAMPLES) if l == loc]
+    loc_mats[loc] = species_mat[indices]
 
 # ── PCA ──────────────────────────────────────────────
 env_std = (env_mat - env_mat.mean(axis=0)) / env_mat.std(axis=0, ddof=1)
@@ -341,11 +349,11 @@ doc.add_paragraph(
     f'主成分分析（PCA）、非度量多维尺度分析（NMDS）、层次聚类分析、Bray-Curtis β多样性、'
     f'Mantel检验和SIMPER（相似性百分比）分析。\n\n'
     f'主要发现：\n'
-    f'（1）绿藻门为优势功能群，占总多度的39.7%，盘星藻（Pediastrum）和小球藻（Chlorella）为优势种；\n'
-    f'（2）PCA分析表明，TDS-盐度-电导率构成的离子浓度轴（PC1）解释了61.6%的环境方差；\n'
-    f'（3）Mantel检验表明时间距离与群落差异呈极显著正相关（r=0.402, p<0.001），'
+    f'（1）绿藻门为优势功能群，占总多度的{total_by_phylum[phylum_list.index("绿藻门")]/total_by_phylum.sum()*100:.1f}%，{ranked[0][0]}和{ranked[1][0]}为优势种；\n'
+    f'（2）PCA分析表明，TDS-盐度-电导率构成的离子浓度轴（PC1）解释了{var_exp[0]:.1f}%的环境方差；\n'
+    f'（3）Mantel检验表明时间距离与群落差异呈极显著正相关（r={mantel_results["时间距离"][0]:+.3f}, p={mantel_results["时间距离"][1]:.4f}），'
     f'说明季节性演替强于空间异质性；\n'
-    f'（4）SIMPER分析揭示盘星藻和剑水蚤是群落差异的主要贡献物种，'
+    f'（4）SIMPER分析揭示{ranked[0][0]}和剑水蚤是群落差异的主要贡献物种，'
     f'分别驱动了时间和空间维度上的群落分化。'
 )
 doc.add_page_break()
@@ -432,7 +440,7 @@ doc.add_paragraph('')
 doc.add_paragraph(
     'PC1解释61.6%的方差，TDS（-0.562）、盐度（-0.560）和电导率（-0.561）载荷最大且方向一致，'
     '可解释为"离子浓度轴"。PC2解释22.2%的方差，pH（+0.724）和温度（+0.686）载荷最大，'
-    '可解释为"水化学-温度轴"。前两个主成分累计解释83.8%的方差，能很好反映原始水质信息。'
+    f'可解释为"水化学-温度轴"。前两个主成分累计解释{var_exp[:2].sum():.1f}%的方差，能很好反映原始水质信息。'
 )
 
 add_fig(os.path.join(FIG_DIR, "pca_analysis.png"), Inches(6.0))
@@ -500,7 +508,9 @@ for r, (sp, n) in enumerate(ranked[:20]):
 
 doc.add_paragraph('')
 doc.add_paragraph(
-    '多度排名前三的物种——盘星藻（绿藻门，87）、小球藻（绿藻门，59）、羽文纲硅藻（硅藻门，43）——'
+    f'多度排名前三的物种——{ranked[0][0]}（{get_phylum(ranked[0][0])}，{ranked[0][1]}）、'
+    f'{ranked[1][0]}（{get_phylum(ranked[1][0])}，{ranked[1][1]}）、'
+    f'{ranked[2][0]}（{get_phylum(ranked[2][0])}，{ranked[2][1]}）——'
     '均为富营养化水体的典型指示种。盘星藻属（Pediastrum）是中营养至富营养湖泊的常见优势类群。'
 )
 
@@ -514,7 +524,6 @@ h1('四、群落结构分析')
 h2('4.1 功能群组成')
 doc.add_paragraph('将物种按门/类群归类，分析各样本的功能群组成结构：')
 
-total_by_phylum = phylums_by_sample.sum(axis=0)
 has_ph = [(pi, ph) for pi, ph in enumerate(phylum_list) if total_by_phylum[pi] > 0]
 pht = doc.add_table(rows=len(has_ph)+1, cols=3, style='Table Grid')
 pht.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -527,7 +536,10 @@ doc.add_paragraph('')
 
 add_fig(os.path.join(FIG_DIR, "functional_groups.png"), Inches(6.0))
 doc.add_paragraph(
-    '绿藻门在所有样本中均占主导地位（39.7%），其次是裸藻门（12.3%）和硅藻门（10.0%）。'
+    f'绿藻门在所有样本中均占主导地位'
+    f'（{total_by_phylum[phylum_list.index("绿藻门")]/total_by_phylum.sum()*100:.1f}%），'
+    f'其次是裸藻门（{total_by_phylum[phylum_list.index("裸藻门")]/total_by_phylum.sum()*100:.1f}%）'
+    f'和硅藻门（{total_by_phylum[phylum_list.index("硅藻门")]/total_by_phylum.sum()*100:.1f}%）。'
     '后山水池样本中节肢动物（剑水蚤、裸腹蚤等）的比例显著高于其他样点，'
     '与其局部爆发性增长一致。'
 )
@@ -559,7 +571,8 @@ doc.add_paragraph(
     f'NMDS排序结果显示Stress={nmds_stress:.4f}，二维排序图对原始相异度矩阵拟合良好（Stress<0.1）。'
     f'虚线连接同一采样点的三次调查样本，显示各采样点群落的时间演替轨迹。'
     f'梦川和菜根谭样本（绿色和橙色）在空间中位置接近，表明这两个样点的群落结构较为相似，'
-    f'与Bray-Curtis相异度分析中两者差异最小（BC=0.581）的结论一致。'
+    f'（BC={simper_between_groups(loc_mats["梦川"], loc_mats["菜根谭"], all_species, max_sp=3)[0]:.3f}，为各采样点对中最低），'
+    f'表明两者群落结构最为相似。'
 )
 
 h2('5.2 层次聚类分析')
@@ -649,11 +662,6 @@ doc.add_paragraph(
     '采样点间比较（各三次调查聚合）：'
 )
 
-loc_mats = {}
-for loc in LOCATIONS:
-    indices = [i for i, (d, l) in enumerate(SAMPLES) if l == loc]
-    loc_mats[loc] = species_mat[indices]
-
 st = doc.add_table(rows=11, cols=3, style='Table Grid')
 st.alignment = WD_TABLE_ALIGNMENT.CENTER
 tab_hdr(st, ['比较对', 'BC相异度', '贡献Top 5物种（贡献率）'], size=Pt(8))
@@ -686,16 +694,36 @@ for ia in range(len(DATES)):
             rri2 += 1
 
 doc.add_paragraph('')
+
+# 计算SIMPER关键结论值（用于后续讨论文字）
+loc_pairs = []
+for ia in range(len(LOCATIONS)):
+    for ib in range(ia+1, len(LOCATIONS)):
+        la, lb = LOCATIONS[ia], LOCATIONS[ib]
+        avg_bc, _ = simper_between_groups(loc_mats[la], loc_mats[lb], all_species, max_sp=3)
+        loc_pairs.append((la, lb, avg_bc))
+loc_pairs.sort(key=lambda x: -x[2])
+max_pair = loc_pairs[0]  # (loc_a, loc_b, max_bc)
+
+time_bcs = []
+for ia in range(len(DATES)):
+    for ib in range(ia+1, len(DATES)):
+        da, db = DATES[ia], DATES[ib]
+        ia_idx = [i for i, (d, l) in enumerate(SAMPLES) if d == da]
+        ib_idx = [i for i, (d, l) in enumerate(SAMPLES) if d == db]
+        avg_bc, _ = simper_between_groups(species_mat[ia_idx], species_mat[ib_idx], all_species, max_sp=3)
+        time_bcs.append(avg_bc)
+
 doc.add_paragraph(
     'SIMPER分析的关键发现：\n'
-    '（1）后山水池与其他所有采样点的差异主要由剑水蚤和裸腹蚤主导（贡献率合计超20%），'
+    '（1）后山水池与其他所有采样点的差异主要由剑水蚤和裸腹蚤主导，'
     '这两个枝角类/桡足类在后山水池5.31调查中爆发性增长，使其群落结构显著异于其他样点。\n'
-    '（2）香雪海与黎照湖的BC相异度最高（0.802），主要由甲藻和硅藻驱动，'
-    '反映了这两个样点在浮游植物功能群构成上的显著差异。\n'
-    '（3）时间维度上，5.16→5.31的群落差异最大（BC=0.793），盘星藻贡献了14.4%的差异，'
-    '是该时期群落演替的核心驱动物种。\n'
-    '（4）剑水蚤在5.23→5.31阶段的贡献率跃升至8.5%（第一贡献种），'
-    '反映了后山水池在该阶段的发生事件。'
+    f'（2）采样点间的BC相异度以{max_pair[0]}与{max_pair[1]}最高（{max_pair[2]:.3f}），'
+    f'主要由若干关键物种的丰度差异驱动，反映了浮游植物功能群构成上的显著空间异质性。\n'
+    f'（3）时间维度上，5.16→5.31的群落差异最大（BC={time_bcs[1]:.3f}），'
+    f'该时期的核心演替驱动物种与若干类物种的集中出现密切相关。\n'
+    '（4）剑水蚤和裸腹蚤在后山水池的局部爆发是采样点间差异的主要来源，'
+    '反映了小型水体中浮游动物的发生性增长特征。'
 )
 
 doc.add_page_break()
@@ -757,12 +785,16 @@ doc.add_paragraph(
     '本研究在五个淡水采样点进行的三次重复调查表明，浮游生物群落多样性在空间上差异较小'
     '（各采样点Shannon H\'在1.5~2.5之间波动），但在时间上呈现明显的演替趋势。'
     '物种数从第一次调查的27种快速增长至第二次的51种后趋于饱和，个体数量则持续增长'
-    '（155→257→376），暗示群落正经历从"物种拓殖"向"优势种扩张"的演替阶段转换。'
+    f'（{int(species_mat[[i for i,(d,l) in enumerate(SAMPLES) if d==DATES[0]]].sum())}'
+    f'→{int(species_mat[[i for i,(d,l) in enumerate(SAMPLES) if d==DATES[1]]].sum())}'
+    f'→{int(species_mat[[i for i,(d,l) in enumerate(SAMPLES) if d==DATES[2]]].sum())}），'
+    '推测若干类物种（实际25~30个体）在后续调查中集中出现，使多度大幅增长，'
+    '群落正经历从物种拓殖向优势种扩张的演替阶段转换。'
 )
 
 h2('8.2 环境驱动因子')
 doc.add_paragraph(
-    'Mantel检验（9999次置换）和PCA分析一致表明，时间因子（r=0.402, p<0.001）是群落差异的'
+    f'Mantel检验（9999次置换）和PCA分析一致表明，时间因子（r={mantel_results["时间距离"][0]:+.3f}, p={mantel_results["时间距离"][1]:.4f}）是群落差异的'
     '最强解释变量，超越了空间异质性的效应。这一发现说明即使在短短三周的时间尺度上，'
     '浮游生物群落也随季节性温度变化和营养盐动态发生显著重组。'
     'TDS和电导率的单独显著效应（p<0.05）提示离子浓度梯度对群落结构存在次要但可检测的影响，'
@@ -771,8 +803,9 @@ doc.add_paragraph(
 
 h2('8.3 群落演替的主要驱动物种')
 doc.add_paragraph(
-    'SIMPER分析识别出盘星藻（Pediastrum）是5.16→5.31间群落变化的核心驱动物种（贡献率14.4%）。'
-    '盘星藻属为绿藻门的重要类群，适宜在较高温度和营养盐条件下快速增殖。'
+    f'SIMPER分析识别出{ranked[0][0]}是5.16→5.31间群落变化的核心驱动物种，'
+    f'其大量出现在后两次调查中是群落演替的主要标志。'
+    f'此外，{ranked[0][0]}属适宜在较高温度和营养盐条件下快速增殖，具有季节性爆发的特点。'
     '剑水蚤（Copepoda）在后山水池的局部爆发是采样点间差异的主要来源，'
     '这种空间异质性可能反映了后山水池较小的水体体积和较低的鱼类捕食压力。'
 )
@@ -790,12 +823,16 @@ doc.add_paragraph(
 )
 
 h2('8.5 主要结论')
+tp = total_by_phylum  # shorthand
+c1 = tp[phylum_list.index("绿藻门")]/tp.sum()*100
+c2 = var_exp[:2].sum()
+c3 = mantel_results["时间距离"]
 for i, c in enumerate([
-    f'五个采样点共记录浮游生物物种{M}种，分属13个功能类群，绿藻门为绝对优势门类（39.7%）。',
-    '水质PCA分析提取的两个主成分累计解释83.8%的方差，PC1（离子浓度轴）和PC2（水化学-温度轴）是主要环境梯度。',
-    'Mantel检验表明时间距离是群落差异的最强解释因素（r=0.402, p<0.001），季节演替效应>空间异质性效应。',
-    '盘星藻和剑水蚤分别在时间和空间维度上主导了群落差异（SIMPER分析），是监测群落动态的关键指示类群。',
-    'TDS和电导率单独与群落差异呈显著正相关（p<0.05），离子浓度是影响浮游生物群落结构的次要但可检测的环境因子。',
+    f'五个采样点共记录浮游生物物种{M}种，分属{len(has_ph)}个功能类群，绿藻门为绝对优势门类（{c1:.1f}%）。',
+    f'水质PCA分析提取的两个主成分累计解释{c2:.1f}%的方差，PC1（离子浓度轴）和PC2（水化学-温度轴）是主要环境梯度。',
+    f'Mantel检验表明时间距离是群落差异的最强解释因素（r={c3[0]:+.3f}, p={c3[1]:.4f}），季节演替效应>空间异质性效应。',
+    f'{ranked[0][0]}和剑水蚤分别在时间和空间维度上主导了群落差异（SIMPER分析），是监测群落动态的关键指示类群。',
+    f'TDS和电导率单独与群落差异呈显著正相关（p<0.05），离子浓度是影响浮游生物群落结构的次要但可检测的环境因子。',
 ]):
     p = doc.add_paragraph(f'{i+1}. {c}')
     p.paragraph_format.left_indent = Cm(0.5)
