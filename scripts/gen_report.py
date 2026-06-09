@@ -351,6 +351,27 @@ for i, (date, loc) in enumerate(SAMPLES):
 pc2_spread = {loc: np.ptp(vals) for loc, vals in pc2_by_loc_date.items()}
 pc2_most_spread = sorted(pc2_spread.items(), key=lambda x: -x[1])
 
+# K-优势度曲线：计算各样本曲线下面积（AUC越小=曲线越陡=优势种越集中）
+def trapz(y, x):
+    auc = 0.0
+    for i in range(len(y)-1):
+        auc += (y[i]+y[i+1])/2 * (x[i+1]-x[i])
+    return auc
+
+kdom_results = []
+for i, (date, loc) in enumerate(SAMPLES):
+    nz = species_mat[i][species_mat[i] > 0]
+    if len(nz) == 0: continue
+    nz_sorted = np.sort(nz)[::-1]
+    cum_pct = np.cumsum(nz_sorted) / nz_sorted.sum() * 100
+    rank_pct = np.arange(1, len(cum_pct)+1) / len(nz_sorted) * 100
+    auc = trapz(cum_pct, rank_pct) / 100
+    top1_pct = nz_sorted[0] / nz_sorted.sum() * 100
+    kdom_results.append((date, loc, auc, top1_pct, nz_sorted[0]))
+# 按AUC升序（最陡→最缓）
+kdom_results.sort(key=lambda x: x[2])
+kdom_steepest = kdom_results[0]  # 最陡峭的样本
+
 # ════════════════════════════════════════════════════════
 # 1. 创建文档
 # ════════════════════════════════════════════════════════
@@ -616,9 +637,12 @@ doc.add_paragraph(
 h2('4.2 K-优势度曲线')
 add_fig(os.path.join(FIG_DIR, "k_dominance.png"), Inches(5.5))
 doc.add_paragraph(
-    'K-优势度曲线反映了各样本中优势种的累积丰度分布。曲线越陡峭，'
-    '表明少数物种主导群落的程度越高。后山水池5.31的曲线最为陡峭，'
-    '与该次调查中剑水蚤和裸腹蚤的爆发性增长吻合。'
+    f'K-优势度曲线反映了各样本中优势种的累积丰度分布。曲线越靠近左上角（即曲线下面积AUC越小），'
+    f'表明少数物种主导群落的程度越高。15条曲线中，{kdom_steepest[1]} {kdom_steepest[0]}的曲线最为陡峭'
+    f'（AUC={kdom_steepest[2]:.2f}），最优势种占{kdom_steepest[3]:.1f}%，'
+    f'反映了调查初期部分样点群落结构简单、少数物种高度集中的特点。'
+    f'三次调查间对比可见，曲线整体随调查批次后移趋于平缓，'
+    f'与群落物种丰富度和均匀度逐渐提高的趋势一致。'
 )
 
 doc.add_page_break()
