@@ -6,7 +6,7 @@
 
 分析方法：
   1. PCA — 水质变量降维 + 与多样性指数的关联
-  2. NMDS — 基于物种组成 Bray-Curtis 距离的排序
+  2. 度量多维排序（Sammon映射）— 基于物种组成 Bray-Curtis 距离
   3. 聚类分析 — 样点物种组成的层次聚类
   4. 相关性分析 — 多样性指数 vs 环境因子矩阵
   5. 功能群分析 — 按门/类群汇总
@@ -208,10 +208,10 @@ plt.close()
 print("  → 图保存: pca_analysis.png")
 
 # ============================================================
-# 2. NMDS 非度量多维尺度分析
+# 2. 度量多维排序分析（Sammon 映射）
 # ============================================================
 print("\n" + "=" * 60)
-print("2. NMDS 排序分析")
+print("2. 度量多维排序（Sammon 映射）")
 print("=" * 60)
 
 def bray_curtis(x, y):
@@ -228,9 +228,9 @@ print(f"  Bray-Curtis 相异度矩阵 ({N}×{N}):")
 print(f"    均值={bc_dist[np.triu_indices(N,1)].mean():.3f}")
 print(f"    范围=[{bc_dist[np.triu_indices(N,1)].min():.3f}, {bc_dist[np.triu_indices(N,1)].max():.3f}]")
 
-# 简单 NMDS（迭代单调回归逼近，不做完整SMACOF，用PCoA初始解 + 迭代调整）
+# Sammon 映射（加权度量MDS，PCoA初始化 + 加权梯度下降）
 def simple_nmds(dist_mat, dims=2, max_iter=200, eps=1e-6):
-    """简化的 NMDS: PCoA 初始化 + 梯度下降"""
+    """Sammon 映射: PCoA 初始化 + 加权梯度下降 (w=1/d)"""
     n = dist_mat.shape[0]
     # 初始化: 用 PCoA (即经典MDS)
     d2 = dist_mat ** 2
@@ -281,9 +281,9 @@ def simple_nmds(dist_mat, dims=2, max_iter=200, eps=1e-6):
     return config, stress
 
 nmds_coords, nmds_stress = simple_nmds(bc_dist)
-print(f"  NMDS Stress = {nmds_stress:.4f}")
+print(f"  度量多维排序 Stress = {nmds_stress:.4f}")
 
-# NMDS 图
+# Sammon 排序图
 fig, ax = plt.subplots(figsize=(8, 7))
 for i, (date, loc) in enumerate(SAMPLES):
     ax.scatter(nmds_coords[i, 0], nmds_coords[i, 1],
@@ -299,9 +299,9 @@ for loc in loc_list:
     if len(pts) == 3:
         ax.plot(pts[:, 0], pts[:, 1], '--', color=loc_colors[loc], alpha=0.4, lw=1)
 
-ax.set_xlabel('NMDS1', fontsize=11)
-ax.set_ylabel('NMDS2', fontsize=11)
-ax.set_title(f'NMDS 排序 (Bray-Curtis, Stress={nmds_stress:.4f})', fontsize=13)
+ax.set_xlabel('MDS1', fontsize=11)
+ax.set_ylabel('MDS2', fontsize=11)
+ax.set_title(f'度量多维排序 (Sammon, Stress={nmds_stress:.4f})', fontsize=13)
 ax.legend(handles=l_leg, title='采样点', loc='best', fontsize=8)
 plt.tight_layout()
 plt.savefig(f"{OUT_DIR}/nmds_analysis.png", dpi=150, bbox_inches='tight')
@@ -583,7 +583,7 @@ print("\n" + "=" * 60)
 print("所有分析完成！")
 print(f"共生成 7 张图:")
 print("  1. pca_analysis.png        — PCA 主成分分析")
-print("  2. nmds_analysis.png       — NMDS 排序分析")
+print("  2. nmds_analysis.png       — 度量多维排序（Sammon 映射）")
 print("  3. cluster_analysis.png    — 层次聚类树状图")
 print("  4. correlation_heatmap.png — 相关性热力图")
 print("  5. functional_groups.png   — 功能群组成")

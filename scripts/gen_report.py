@@ -178,7 +178,7 @@ for i in range(N):
     for j in range(N):
         bc_dist[i, j] = bray_curtis(species_mat[i], species_mat[j])
 
-# ── 按采样点构建聚合矩阵（提前计算，供NMDS/SIMPER共用）─
+# ── 按采样点构建聚合矩阵（提前计算，供排序/SIMPER共用）─
 loc_mats = {}
 for loc in LOCATIONS:
     indices = [i for i, (d, l) in enumerate(SAMPLES) if l == loc]
@@ -193,7 +193,7 @@ eigvals, eigvecs = eigvals[order], eigvecs[:, order]
 var_exp = eigvals / eigvals.sum() * 100
 pc_scores = env_std @ eigvecs
 
-# ── NMDS ─────────────────────────────────────────────
+# ── Sammon 映射（加权度量多维排序）─────────────────
 def simple_nmds(dist_mat, dims=2, max_iter=200, eps=1e-6):
     n = dist_mat.shape[0]
     d2 = dist_mat ** 2
@@ -382,10 +382,9 @@ for i, (date, loc) in enumerate(SAMPLES):
 kdom_results.sort(key=lambda x: x[2])
 kdom_steepest = kdom_results[0]  # 最陡峭的样本
 
-# ── NMDS 颜色映射（与 advanced_analysis.py 中一致）──
-NMDS_COLORS_HEX = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00']
-NMDS_COLORS_CN = ['红色', '蓝色', '绿色', '紫色', '橙色']
-loc_color_map = {loc: NMDS_COLORS_CN[i] for i, loc in enumerate(LOCATIONS)}
+# ── 排序图颜色映射（与 advanced_analysis.py 中一致）──
+SORT_COLORS_CN = ['红色', '蓝色', '绿色', '紫色', '橙色']
+loc_color_map = {loc: SORT_COLORS_CN[i] for i, loc in enumerate(LOCATIONS)}
 
 # ── 标准 Kruskal Stress-1（度量版本，供方法学参考）──
 cd_nmds = np.sqrt(np.sum((nmds_coords[:,None,:] - nmds_coords[None,:,:])**2, axis=2))
@@ -674,7 +673,7 @@ doc.add_page_break()
 # ════════════════════════════════════════════════════════
 h1('五、群落排序与分类')
 
-h2('5.1 NMDS 排序分析')
+h2('5.1 度量多维排序分析（Sammon 映射）')
 # 选BC最低的样点对（群落最相似）用于文字描述
 loc_bc_pairs = []
 for ia in range(len(LOCATIONS)):
@@ -698,7 +697,7 @@ doc.add_paragraph(
 
 add_fig(os.path.join(FIG_DIR, "nmds_analysis.png"), Inches(5.5))
 doc.add_paragraph(
-    f'NMDS排序图中虚线连接同一采样点的三次调查样本，显示各采样点群落的时间演替轨迹。'
+    f'排序图中虚线连接同一采样点的三次调查样本，显示各采样点群落的时间演替轨迹。'
     f'{most_similar[0]}（{loc_color_map[most_similar[0]]}）和{most_similar[1]}'
     f'（{loc_color_map[most_similar[1]]}）在空间中位置最为接近'
     f'（BC={most_similar[2]:.3f}，为各采样点对中最低），'
