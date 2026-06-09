@@ -165,6 +165,7 @@ for i in range(N):
             phylums_by_sample[i, phylum_list.index(ph)] += species_mat[i, j]
 
 total_by_phylum = phylums_by_sample.sum(axis=0)
+has_ph = [(pi, ph) for pi, ph in enumerate(phylum_list) if total_by_phylum[pi] > 0]
 
 # ── Bray-Curtis ──────────────────────────────────────
 def bray_curtis(x, y):
@@ -310,6 +311,10 @@ for d in DATES:
     date_sp_counts[d] = len(sp_set)
     date_n_counts[d] = int(species_mat[idx].sum())
 
+# Shannon H' 实际范围（用于讨论文字）
+shannon_vals = div_indices[:, 2]
+shannon_min, shannon_max = shannon_vals.min(), shannon_vals.max()
+
 # Pielou 与环境因子的相关性
 pielou_tds_r, pielou_tds_p = stats.pearsonr(div_indices[:, 4], env_mat[:, 0])
 pielou_sal_r, pielou_sal_p = stats.pearsonr(div_indices[:, 4], env_mat[:, 1])
@@ -372,6 +377,17 @@ for i, (date, loc) in enumerate(SAMPLES):
 kdom_results.sort(key=lambda x: x[2])
 kdom_steepest = kdom_results[0]  # 最陡峭的样本
 
+# ── NMDS 颜色映射（与 advanced_analysis.py 中一致）──
+NMDS_COLORS_HEX = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00']
+NMDS_COLORS_CN = ['红色', '蓝色', '绿色', '紫色', '橙色']
+loc_color_map = {loc: NMDS_COLORS_CN[i] for i, loc in enumerate(LOCATIONS)}
+
+# ── 标准 Kruskal Stress-1（度量版本，供方法学参考）──
+cd_nmds = np.sqrt(np.sum((nmds_coords[:,None,:] - nmds_coords[None,:,:])**2, axis=2))
+stress1_num = np.sum((bc_dist - cd_nmds)**2)
+stress1_den = np.sum(cd_nmds**2)
+stress1_raw = np.sqrt(stress1_num / stress1_den) if stress1_den > 0 else 0.0
+
 # ════════════════════════════════════════════════════════
 # 1. 创建文档
 # ════════════════════════════════════════════════════════
@@ -426,9 +442,9 @@ h1('摘  要')
 doc.add_paragraph(
     f'本报告基于对五个淡水采样点（黎照湖、香雪海、梦川、后山水池、菜根谭）'
     f'于2026年5月开展的三次野外调查数据，对浮游生物群落进行了系统的定量生态学分析。'
-    f'共记录浮游生物物种{M}种，涵盖绿藻门、硅藻门、裸藻门、蓝藻门等13个功能类群。'
+    f'共记录浮游生物物种{M}种，涵盖绿藻门、硅藻门、裸藻门、蓝藻门等{len(has_ph)}个功能类群。'
     f'分析方法包括：生物多样性指数计算（Shannon-Wiener、Simpson、Pielou、Margalef）、'
-    f'主成分分析（PCA）、非度量多维尺度分析（NMDS）、层次聚类分析、Bray-Curtis β多样性、'
+    f'主成分分析（PCA）、加权度量多维排序分析（Sammon映射）、层次聚类分析、Bray-Curtis β多样性、'
     f'Mantel检验和SIMPER（相似性百分比）分析。\n\n'
     f'主要发现：\n'
     f'（1）绿藻门为优势功能群，占总多度的{total_by_phylum[phylum_list.index("绿藻门")]/total_by_phylum.sum()*100:.1f}%，{ranked[0][0]}和{ranked[1][0]}为优势种；\n'
@@ -614,7 +630,6 @@ h1('四、群落结构分析')
 h2('4.1 功能群组成')
 doc.add_paragraph('将物种按门/类群归类，分析各样本的功能群组成结构：')
 
-has_ph = [(pi, ph) for pi, ph in enumerate(phylum_list) if total_by_phylum[pi] > 0]
 pht = doc.add_table(rows=len(has_ph)+1, cols=3, style='Table Grid')
 pht.alignment = WD_TABLE_ALIGNMENT.CENTER
 tab_hdr(pht, ['功能群', '总多度', '占比(%)'])
@@ -653,19 +668,32 @@ doc.add_page_break()
 h1('五、群落排序与分类')
 
 h2('5.1 NMDS 排序分析')
+# 选BC最低的样点对（群落最相似）用于文字描述
+loc_bc_pairs = []
+for ia in range(len(LOCATIONS)):
+    for ib in range(ia+1, len(LOCATIONS)):
+        avg_bc, _ = simper_between_groups(loc_mats[LOCATIONS[ia]], loc_mats[LOCATIONS[ib]], all_species, max_sp=3)
+        loc_bc_pairs.append((LOCATIONS[ia], LOCATIONS[ib], avg_bc))
+loc_bc_pairs.sort(key=lambda x: x[2])
+most_similar = loc_bc_pairs[0]  # BC最低=最相似
+
 doc.add_paragraph(
-    f'基于Bray-Curtis相异度矩阵进行NMDS排序（Stress={nmds_stress:.4f}），'
-    f'以可视化15个样本间群落组成的相似性关系。Bray-Curtis相异度的计算不依赖于'
-    f'物种分布的参数假设，对稀疏数据具有较好的稳健性。'
+    f'基于Bray-Curtis相异度矩阵进行加权度量多维排序分析'
+    f'（PCoA初始化 + 加权梯度下降优化，'
+    f'权重函数 w=1/d，即Sammon映射方案），'
+    f'以在二维空间中可视化15个样本间群落组成的相似性关系。'
+    f'优化达到的加权应力为{nmds_stress:.4f}，'
+    f'对应的原始度量应力（Kruskal Stress-1）为{stress1_raw:.4f}'
+    f'（<0.1为拟合良好），二维排序图对原始相异度矩阵的保距效果可接受。'
 )
 
 add_fig(os.path.join(FIG_DIR, "nmds_analysis.png"), Inches(5.5))
 doc.add_paragraph(
-    f'NMDS排序结果显示Stress={nmds_stress:.4f}，二维排序图对原始相异度矩阵拟合良好（Stress<0.1）。'
-    f'虚线连接同一采样点的三次调查样本，显示各采样点群落的时间演替轨迹。'
-    f'梦川和菜根谭样本（绿色和橙色）在空间中位置接近，表明这两个样点的群落结构较为相似，'
-    f'（BC={simper_between_groups(loc_mats["梦川"], loc_mats["菜根谭"], all_species, max_sp=3)[0]:.3f}，为各采样点对中最低），'
-    f'表明两者群落结构最为相似。'
+    f'NMDS排序图中虚线连接同一采样点的三次调查样本，显示各采样点群落的时间演替轨迹。'
+    f'{most_similar[0]}（{loc_color_map[most_similar[0]]}）和{most_similar[1]}'
+    f'（{loc_color_map[most_similar[1]]}）在空间中位置最为接近'
+    f'（BC={most_similar[2]:.3f}，为各采样点对中最低），'
+    f'表明两者的群落结构在五个采样点中最为相似。'
 )
 
 h2('5.2 层次聚类分析')
@@ -810,8 +838,9 @@ for ia in range(len(DATES)):
 
 doc.add_paragraph(
     'SIMPER分析的关键发现：\n'
-    '（1）后山水池与其他所有采样点的差异主要由剑水蚤和裸腹蚤主导，'
-    '这两个枝角类/桡足类在后山水池5.31调查中爆发性增长，使其群落结构显著异于其他样点。\n'
+    '（1）后山水池与其他样点的差异由多个物种共同驱动，其中剑水蚤（贡献率5.6-8.8%）和裸腹蚤（3.4-5.4%）'
+    '在后山水池与其他样点的比较中贡献突出，'
+    '体现了后山水池5.31调查中浮游动物的局部爆发性增长对群落结构的显著影响。\n'
     f'（2）采样点间的BC相异度以{max_pair[0]}与{max_pair[1]}最高（{max_pair[2]:.3f}），'
     f'主要由若干关键物种的丰度差异驱动，反映了浮游植物功能群构成上的显著空间异质性。\n'
     f'（3）时间维度上，5.16→5.31的群落差异最大（BC={time_bcs[1]:.3f}），'
@@ -890,7 +919,7 @@ h1('八、综合讨论与结论')
 h2('8.1 群落多样性的时空格局')
 doc.add_paragraph(
     '本研究在五个淡水采样点进行的三次重复调查表明，浮游生物群落多样性在空间上差异较小'
-    '（各采样点Shannon H\'在1.5~2.5之间波动），但在时间上呈现明显的演替趋势。'
+    f'（各采样点Shannon H\'在{shannon_min:.2f}~{shannon_max:.2f}之间波动），但在时间上呈现明显的演替趋势。'
     f'物种数从第一次调查的{date_sp_counts[DATES[0]]}种快速增长至'
     f'第二次的{date_sp_counts[DATES[1]]}种后趋于饱和，个体数量则持续增长'
     f'（{date_n_counts[DATES[0]]}'
@@ -905,7 +934,9 @@ doc.add_paragraph(
     f'Mantel检验（9999次置换）和PCA分析一致表明，时间因子（r={mantel_results["时间距离"][0]:+.3f}, p={mantel_results["时间距离"][1]:.4f}）是群落差异的'
     '最强解释变量，超越了空间异质性的效应。这一发现说明即使在短短三周的时间尺度上，'
     '浮游生物群落也随季节性温度变化和营养盐动态发生显著重组。'
-    'TDS和电导率的单独显著效应（p<0.05）提示离子浓度梯度对群落结构存在次要但可检测的影响，'
+    f'TDS（r={mantel_results["TDS"][0]:+.3f}, p={mantel_results["TDS"][1]:.4f}）'
+    f'和电导率（r={mantel_results["电导率"][0]:+.3f}, p={mantel_results["电导率"][1]:.4f}）'
+    f'的单独显著效应提示离子浓度梯度对群落结构存在次要但可检测的影响，'
     '其生态学机制可能涉及渗透压胁迫和特定离子的生理效应。'
 )
 
@@ -913,7 +944,7 @@ h2('8.3 群落演替的主要驱动物种')
 doc.add_paragraph(
     f'SIMPER分析识别出{ranked[0][0]}是5.16→5.31间群落变化的核心驱动物种，'
     f'其大量出现在后两次调查中是群落演替的主要标志。'
-    f'此外，{ranked[0][0]}属适宜在较高温度和营养盐条件下快速增殖，具有季节性爆发的特点。'
+    f'此外，{ranked[0][0]}类群适宜在较高温度和有机质丰富的条件下快速增殖，具有季节性爆发的特点。'
     '剑水蚤（Copepoda）在后山水池的局部爆发是采样点间差异的主要来源，'
     '这种空间异质性可能反映了后山水池较小的水体体积和较低的鱼类捕食压力。'
 )
@@ -940,7 +971,7 @@ for i, c in enumerate([
     f'水质PCA分析提取的两个主成分累计解释{c2:.1f}%的方差，PC1（离子浓度轴）和PC2（水化学-温度轴）是主要环境梯度。',
     f'Mantel检验表明时间距离是群落差异的最强解释因素（r={c3[0]:+.3f}, p={c3[1]:.4f}），季节演替效应>空间异质性效应。',
     f'{ranked[0][0]}和剑水蚤分别在时间和空间维度上主导了群落差异（SIMPER分析），是监测群落动态的关键指示类群。',
-    f'TDS和电导率单独与群落差异呈显著正相关（p<0.05），离子浓度是影响浮游生物群落结构的次要但可检测的环境因子。',
+    f'TDS和电导率单独与群落差异呈显著正相关（r={mantel_results["TDS"][0]:+.3f}/{mantel_results["电导率"][0]:+.3f}, p<0.05），离子浓度是影响浮游生物群落结构的次要但可检测的环境因子。',
 ]):
     p = doc.add_paragraph(f'{i+1}. {c}')
     p.paragraph_format.left_indent = Cm(0.5)
@@ -973,7 +1004,7 @@ doc.add_paragraph(
 h2('9.3 分析脚本说明')
 doc.add_paragraph(
     'analysis.py — 多样性指数计算与多度排名\n'
-    'advanced_analysis.py — PCA、NMDS、聚类、相关性、功能群、Beta多样性、指示物种、K-优势度曲线\n'
+    'advanced_analysis.py — PCA、度量多维排序、聚类、相关性、功能群、Beta多样性、指示物种、K-优势度曲线\n'
     'mantel_simper.py — Mantel检验与SIMPER分析\n'
     'gen_report.py — 本报告生成脚本\n'
     'clean.py — 数据清洗脚本\n\n'
