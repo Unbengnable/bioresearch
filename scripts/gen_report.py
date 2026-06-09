@@ -682,9 +682,11 @@ doc.add_paragraph(
     f'（PCoA初始化 + 加权梯度下降优化，'
     f'权重函数 w=1/d，即Sammon映射方案），'
     f'以在二维空间中可视化15个样本间群落组成的相似性关系。'
-    f'优化达到的加权应力为{nmds_stress:.4f}，'
-    f'对应的原始度量应力（Kruskal Stress-1）为{stress1_raw:.4f}'
-    f'（<0.1为拟合良好），二维排序图对原始相异度矩阵的保距效果可接受。'
+    f'优化达到的加权应力为{nmds_stress:.4f}（Sammon应力，侧重近距离点对的保真度），'
+    f'对应的非加权原始应力（Kruskal Stress-1）为{stress1_raw:.4f}。'
+    f'加权应力远低于原始应力，表明二维排序图对群落相似度较高的样本对'
+    f'（即BC距离较小的样本对）具有较好的保距效果，'
+    f'但对整体距离结构的还原能力有限——这是度量多维排序中常见的权衡。'
 )
 
 add_fig(os.path.join(FIG_DIR, "nmds_analysis.png"), Inches(5.5))
