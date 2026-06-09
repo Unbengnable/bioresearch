@@ -291,6 +291,11 @@ for (date, loc), entries in groups.items():
         loc_agg[loc]["species"].add(sp)
         loc_agg[loc]["total_n"] += n
 
+# ── Beta多样性 t检验（全局空间效应检验）─────────────
+same_site_beta = [bc_dist[i,j] for i in range(N) for j in range(i+1,N) if SAMPLES[i][1]==SAMPLES[j][1]]
+diff_site_beta = [bc_dist[i,j] for i in range(N) for j in range(i+1,N) if SAMPLES[i][1]!=SAMPLES[j][1]]
+t_stat_beta, t_p_beta = stats.ttest_ind(same_site_beta, diff_site_beta)
+
 # ── 预计算供文本引用的统计量 ──────────────────────────
 # 采样点物种数排名
 loc_species_rank = sorted([(loc, len(agg["species"]), agg["total_n"])
@@ -451,8 +456,10 @@ doc.add_paragraph(
     f'（2）PCA分析表明，TDS-盐度-电导率构成的离子浓度轴（PC1）解释了{var_exp[0]:.1f}%的环境方差；\n'
     f'（3）Mantel检验表明时间距离与群落差异呈极显著正相关（r={mantel_results["时间距离"][0]:+.3f}, p={mantel_results["时间距离"][1]:.4f}），'
     f'说明季节性演替强于空间异质性；\n'
-    f'（4）SIMPER分析揭示{ranked[0][0]}和剑水蚤是群落差异的主要贡献物种，'
-    f'分别驱动了时间和空间维度上的群落分化。'
+    f'（4）SIMPER分析揭示{ranked[0][0]}是时间维度群落演替的核心驱动种，'
+    f'剑水蚤在后山水池的局部爆发则构成了样点间成对差异的主要贡献；'
+    f'但全局Mantel检验（空间p={p_space:.3f}）和Beta多样性t检验'
+    f'（p={t_p_beta:.3f}）均表明这些局部差异未汇聚为统计显著的空间结构。'
 )
 doc.add_page_break()
 
@@ -707,18 +714,14 @@ doc.add_paragraph(
     '明显区别于后两次调查（5.23和5.31）的样本。这反映了"若干"类物种（实际25~30个个体）'
     '在后期调查中的大幅增加使群落多度显著膨胀，导致5.16与后两次调查的群落结构出现断裂式差异。'
     '后两次调查的样本在聚类中进一步按采样点分组，表明在整体丰度提高后，'
-    '空间异质性开始显现——梦川与菜根谭较为相似，后山水池与香雪海更接近。'
+    '各采样点的群落组成差异变得更加可辨识——梦川与菜根谭较为相似，后山水池与香雪海更接近。'
 )
 
 h2('5.3 Beta 多样性')
-same_site = [bc_dist[i,j] for i in range(N) for j in range(i+1,N) if SAMPLES[i][1]==SAMPLES[j][1]]
-diff_site = [bc_dist[i,j] for i in range(N) for j in range(i+1,N) if SAMPLES[i][1]!=SAMPLES[j][1]]
-t_stat, t_p = stats.ttest_ind(same_site, diff_site)
-
 doc.add_paragraph(
-    f'同一采样点内（时间变化）的相异度：{np.mean(same_site):.3f} ± {np.std(same_site):.3f}（n={len(same_site)}）。'
-    f'不同采样点间（空间变化）的相异度：{np.mean(diff_site):.3f} ± {np.std(diff_site):.3f}（n={len(diff_site)}）。'
-    f't检验（t={t_stat:.3f}, p={t_p:.4f}）表明组内与组间差异不显著，提示时间变化与空间变化效应相当。'
+    f'同一采样点内（时间变化）的相异度：{np.mean(same_site_beta):.3f} ± {np.std(same_site_beta):.3f}（n={len(same_site_beta)}）。'
+    f'不同采样点间（空间变化）的相异度：{np.mean(diff_site_beta):.3f} ± {np.std(diff_site_beta):.3f}（n={len(diff_site_beta)}）。'
+    f't检验（t={t_stat_beta:.3f}, p={t_p_beta:.4f}）表明组内与组间差异不显著，提示时间变化与空间变化效应相当。'
 )
 
 add_fig(os.path.join(FIG_DIR, "beta_diversity.png"), Inches(5.0))
@@ -844,11 +847,18 @@ doc.add_paragraph(
     '在后山水池与其他样点的比较中贡献突出，'
     '体现了后山水池5.31调查中浮游动物的局部爆发性增长对群落结构的显著影响。\n'
     f'（2）采样点间的BC相异度以{max_pair[0]}与{max_pair[1]}最高（{max_pair[2]:.3f}），'
-    f'主要由若干关键物种的丰度差异驱动，反映了浮游植物功能群构成上的显著空间异质性。\n'
+    f'主要由若干关键物种在不同样点间的多度差异驱动。'
+    f'值得注意的是，尽管全局Mantel检验否定了系统性的空间结构（p={p_space:.3f}），'
+    f'个别样点的局部物种爆发仍可在成对比较中产生较高的BC相异度，'
+    f'但这不代表群落组成存在统计上显著的空间梯度。\n'
     f'（3）时间维度上，5.16→5.31的群落差异最大（BC={time_bcs[1]:.3f}），'
     f'该时期的核心演替驱动物种与若干类物种的集中出现密切相关。\n'
-    '（4）剑水蚤和裸腹蚤在后山水池的局部爆发是采样点间差异的主要来源，'
-    '反映了小型水体中浮游动物的发生性增长特征。'
+    '（4）剑水蚤和裸腹蚤在后山水池5.31调查中的局部爆发，'
+    '使该样点的群落组成区别于其他样点，'
+    '反映了小型水体中浮游动物种群的发生性（episodic）增长特征。'
+    '这一局部事件不应被解读为系统性的空间异质性——'
+    f'Mantel检验（p={p_space:.3f}）和Beta多样性t检验（p={t_p_beta:.3f}）'
+    '均未检测到显著的空间结构。'
 )
 
 doc.add_page_break()
@@ -947,8 +957,11 @@ doc.add_paragraph(
     f'SIMPER分析识别出{ranked[0][0]}是5.16→5.31间群落变化的核心驱动物种，'
     f'其大量出现在后两次调查中是群落演替的主要标志。'
     f'此外，{ranked[0][0]}类群适宜在较高温度和有机质丰富的条件下快速增殖，具有季节性爆发的特点。'
-    '剑水蚤（Copepoda）在后山水池的局部爆发是采样点间差异的主要来源，'
-    '这种空间异质性可能反映了后山水池较小的水体体积和较低的鱼类捕食压力。'
+    '剑水蚤（Copepoda）在后山水池5.31调查中的爆发性增长，'
+    f'使该样点在成对SIMPER比较中显著区别于其他样点（BC=0.771~0.854）。'
+    '然而，Mantel检验和Beta多样性t检验均未检测到系统性的空间结构，'
+    '表明这一现象更可能是后山水池特有的局部生境事件（如较小的水体体积、'
+    '暂时性的捕食压力降低或营养脉冲），而非反映整个研究区域内普遍存在的空间异质性梯度。'
 )
 
 h2('8.4 方法学考量与建议')
@@ -972,7 +985,8 @@ for i, c in enumerate([
     f'五个采样点共记录浮游生物物种{M}种，分属{len(has_ph)}个功能类群，绿藻门为绝对优势门类（{c1:.1f}%）。',
     f'水质PCA分析提取的两个主成分累计解释{c2:.1f}%的方差，PC1（离子浓度轴）和PC2（水化学-温度轴）是主要环境梯度。',
     f'Mantel检验表明时间距离是群落差异的最强解释因素（r={c3[0]:+.3f}, p={c3[1]:.4f}），季节演替效应>空间异质性效应。',
-    f'{ranked[0][0]}和剑水蚤分别在时间和空间维度上主导了群落差异（SIMPER分析），是监测群落动态的关键指示类群。',
+    f'{ranked[0][0]}是群落时间演替的核心驱动种（SIMPER分析，贡献率12.6-19.6%，各时间对比均居首位）；'
+    f'剑水蚤则代表了后山水池特有的局部种群爆发事件，虽在成对比较中贡献突出，但该局部现象尚未汇聚为统计显著的空间结构。',
     f'TDS和电导率单独与群落差异呈显著正相关（r={mantel_results["TDS"][0]:+.3f}/{mantel_results["电导率"][0]:+.3f}, p<0.05），离子浓度是影响浮游生物群落结构的次要但可检测的环境因子。',
 ]):
     p = doc.add_paragraph(f'{i+1}. {c}')
