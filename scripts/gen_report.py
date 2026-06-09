@@ -334,10 +334,15 @@ for loc in LOCATIONS:
     if best and best[1] > 0.4:
         indicator_top[loc] = best
 
-# PC1 得分极值采样点
-pc1_by_sample = [(pc_scores[i, 0], SAMPLES[i][0], SAMPLES[i][1]) for i in range(N)]
-pc1_neg_loc = sorted(set(loc for score, dt, loc in pc1_by_sample if score < 0))
-pc1_pos_loc = sorted(set(loc for score, dt, loc in pc1_by_sample if score > 0))
+# PC1 得分极值采样点（按各采样点平均分，避免同一地点跨正负两侧）
+pc1_avg_by_loc = {}
+for loc in LOCATIONS:
+    scores = [pc_scores[i, 0] for i, (d, l) in enumerate(SAMPLES) if l == loc]
+    pc1_avg_by_loc[loc] = np.mean(scores)
+# 按平均PC1从负到正排列
+pc1_sorted = sorted(pc1_avg_by_loc.items(), key=lambda x: x[1])
+pc1_neg_locs = [(loc, avg) for loc, avg in pc1_sorted if avg < 0]   # 偏负样点
+pc1_pos_locs = [(loc, avg) for loc, avg in pc1_sorted if avg > 0]   # 偏正样点
 
 # 各日期 PCA 得分范围（用于描述 PC2 分散程度）
 pc2_by_loc_date = defaultdict(list)
@@ -505,9 +510,9 @@ add_fig(os.path.join(FIG_DIR, "pca_analysis.png"), Inches(6.0))
 doc.add_paragraph(
     f'PCA得分图（左）展示了15个样本在PC1-PC2空间中的分布，同一采样点的三次调查以不同形状标记。'
     f'箭头表示各环境变量的载荷方向和大小。'
-    f'{"、".join(sorted(pc1_neg_loc)[:2])}样本在PC1上偏负，'
+    f'{"、".join(loc for loc, _ in pc1_neg_locs[:2])}样本在PC1上偏负，'
     f'反映较高的离子浓度综合得分；'
-    f'{"、".join(sorted(pc1_pos_loc)[:2])}样本在PC1上偏正，离子浓度综合得分较低。'
+    f'{"、".join(loc for loc, _ in pc1_pos_locs[-2:][::-1])}样本在PC1上偏正，离子浓度综合得分较低。'
     f'在PC2轴上，{pc2_most_spread[0][0]}和{pc2_most_spread[1][0]}样本的分散程度最大，'
     f'体现了pH和温度在时间维度上的波动。'
     f'右图展示了PC1与Shannon多样性指数的关系。'
